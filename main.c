@@ -18,7 +18,7 @@ int  timer_count = 0;
 void registe_timer(coroutine_func cb, void * argv, time_t next)
 {
 
-    /* printf ("registe_timer coro: %p, next: %llu\n", argv, (unsigned long long)next); */
+    printf ("registe_timer coro: %p, next: %llu\n\n", argv, (unsigned long long)next);
     for (int i = 0; i < timer_count ; i ++)
     {
         if (timer_list[i].argv == argv)
@@ -49,10 +49,9 @@ void coro_sleep(void* argv,int interval)
 void func1(void* argv)
 {
     printf ("start func1\n");
-
     for (int i = 0;i < 5; i ++)
     {
-        printf ("func1 [%d]: %llu\n",i, (long long unsigned int)(time_stamp));
+        printf ("%p, func1 [%d]: %llu\n",&i, i, (long long unsigned int)(time_stamp));
         coro_sleep(argv, 2);
     }
     printf ("end func1\n");
@@ -64,7 +63,7 @@ void func2(void* argv)
 
     for (int i = 0;i < 10; i ++)
     {
-        printf ("func2 [%d]: %llu\n",i, (long long unsigned int)(time_stamp));
+        printf ("%p, func2 [%d]: %llu\n",&i , i, (long long unsigned int)(time_stamp));
         coro_sleep(argv,4 );
 
     }
@@ -96,10 +95,20 @@ int main()
                 timer_list[i].cb(timer_list[i].argv);
             }
         }
-        if (co1->_status == COROUTINE_INIT && co2->_status == COROUTINE_INIT)
+        if (co1->_status == COROUTINE_INIT)
         {
-            break; //finish
+            /* restart_coro(co1, func1, NULL); */
+            restart_coro(co1, func1, co1);
         }
+        if (co2->_status == COROUTINE_INIT)
+        {
+            /* restart_coro(co2, func2, NULL); */
+            restart_coro(co2, func2, co2);
+        }
+        /* if (co1->_status == COROUTINE_INIT && co2->_status == COROUTINE_INIT) */
+        /* { */
+        /*     break; //finish */
+        /* } */
         /* loop_check(); */
         /* printf ("\n\n\nin daemon loop\n"); */
         schedule_loop();

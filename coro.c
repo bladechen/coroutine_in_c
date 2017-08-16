@@ -22,6 +22,7 @@ extern   void restore_context(struct context* jbf, int ret);
  */
 extern   void replace_esp(struct context* jbf, void* esp);
 
+static void make_coro_runnable(struct coroutine* coro);
 static struct coroutine* new_coro();
 static void set_running_coro(struct coroutine* co);
 static void init_context(struct coroutine* coro);
@@ -91,6 +92,19 @@ static bool init_stack(struct coroutine* coro)
     coro->_stack_sz = STACK_SIZE;
     coro->_stack_top = (void*)((size_t)(coro->_stack_addr)  + coro->_stack_sz);
     return true;
+}
+
+
+void restart_coro(struct coroutine* coro,  coroutine_func func, void* argv)
+{
+    coro->_entry = func;
+    coro->_argv = argv;
+    /* if (initial_coro(coro) == false) */
+    /* { */
+    /*     destroy_coro(coro); */
+    /*     return NULL; */
+    /* } */
+    make_coro_runnable(coro);
 }
 
 static void reset_coro(struct coroutine* coro)
