@@ -42,7 +42,7 @@ void make_list_empty(struct list * l)
         {
             break;
         }
-        list_reset(pos);
+        list_del(pos);
     }
     return;
 }
@@ -63,7 +63,15 @@ bool is_linked(struct list_head* link)
     return !(link->next == link->prev && (link->next == link ||link->next == NULL) );
 
 }
-void list_reset(struct list_head *entry)
+void list_del(struct list_head *entry)
 {
     list_del_init(entry);
+}
+struct list_head* list_front(struct list* l)
+{
+    if(is_list_empty(l))
+    {
+        return NULL;
+    }
+    return l->head.next;
 }
