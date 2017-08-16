@@ -61,3 +61,5 @@ void destroy_coro(struct coroutine* coro);
 
 void yield_coro(void);
 void resume_coro(struct coroutine* coro);
+
+void restart_coro(struct coroutine* coro,  coroutine_func func, void* argv);
