@@ -7,7 +7,7 @@
 
 enum COROUTINE_STATUS
 {
-    COROUTINE_DEAD = 0,
+    COROUTINE_INIT = 0,
     COROUTINE_READY ,
     COROUTINE_RUNNING ,
     COROUTINE_SUSPEND ,
@@ -42,23 +42,19 @@ struct coroutine
 
 struct schedule
 {
-    struct list* _pending_list;
+    struct list* _pending_list; // coroutine in ready status
 
+    struct list* _block_list; // SUSPEND, maybe wait for io...
     struct coroutine* _running;
 
     struct coroutine* _daemon;
-
 };
 
-//TODO later
-/* struct coroutine_pool */
-/* { */
-/*  */
-/* }; */
 
-
-int bootstrap_coro_env();
-int shutdown_coro_env();
+void bootstrap_coro_env();
+void shutdown_coro_env();
+void schedule_coro();
+void schedule_loop();
 
 struct coroutine* create_coro(coroutine_func func, void* argv);
 void destroy_coro(struct coroutine* coro);
