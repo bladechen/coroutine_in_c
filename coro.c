@@ -205,11 +205,28 @@ struct coroutine* create_coro(coroutine_func func, void* argv)
 
 void resume_coro(struct coroutine* coro)
 {
-    current_running_coro()->_status = COROUTINE_READY;
-    assert(current_running_coro() != coro);
-    set_running_coro(coro);
-    coro->_status = COROUTINE_RUNNING;
-    _restore_ctx(coro);
+
+
+    assert(current_running_coro() == schedule_obj._daemon);
+    assert(coro->_status == COROUTINE_SUSPEND);
+    if (save_context(&(current_running_coro()->_ctx)) == 0)
+    {
+        (( struct coroutine*)(current_running_coro()))->_status = COROUTINE_READY;
+        assert(current_running_coro() != coro);
+        set_running_coro(coro);
+
+        coro->_status = COROUTINE_RUNNING;
+        _restore_ctx(coro);
+    }
+    /* printf ("%p %p\n",current_running_coro(),  coro); */
+    /* zero_context(&(current_running_coro()->_ctx)); */
+    assert(current_running_coro()->_status == COROUTINE_RUNNING);
+    /* j */
+    /* current_running_coro()->_status = COROUTINE_READY; */
+    /* assert(current_running_coro() != coro); */
+    /* set_running_coro(coro); */
+    /* coro->_status = COROUTINE_RUNNING; */
+    /* _restore_ctx(coro); */
 }
 
 
