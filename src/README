@@ -1,0 +1,7 @@
+mkdir build
+cd build
+cmake ../
+make
+启动echo_svr ./server
+启动python_svr python echo_svr.py      
+启动2-3个telnet，输入一些字符。            
