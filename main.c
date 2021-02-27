@@ -160,11 +160,52 @@ struct FDInfo {
     struct coroutine* coro;
 };
 
+void coro_recv(void* argv) {
+    int fd = ((struct FDInfo*)(argv))->fd;
+    printf ("calling coro_recv on fd: %d\n", fd);
+	ssize_t count;
+	char buf[512];
+
+    while(1)
+    {
+        count = read(fd, buf, sizeof(buf));
+        if(count == -1)
+        {
+            if(errno != EAGAIN)
+            {
+                perror("read");
+                abort();
+            }
+            yield_coro();
+        }
+        else if(count == 0)
+        {
+            break;
+        }
+        coro_sleep(((struct FDInfo*)(argv))->coro, 10);
+
+        buf[count] = '\n';
+        int s = write(1, buf, count+1);
+        if(s == -1)
+        {
+            perror("write");
+            abort();
+        }
+
+        s = write(fd, buf, count+1);
+        if(s == -1)
+        {
+            perror("socket write");
+            abort();
+        }
+    }
+}
+
 void coro_listen(void* argv) {
 
     int fd =  ((struct FDInfo*)(argv))->fd;
     printf ("calling coro_listen on fd: %d\n", fd);
-    do {
+    while (1) {
         struct epoll_event event ;
         struct sockaddr in_addr;
         socklen_t in_len;
@@ -179,7 +220,7 @@ void coro_listen(void* argv) {
                (errno == EWOULDBLOCK))
             {
                 yield_coro();
-                break;
+                continue;
             }
             else
             {
@@ -201,14 +242,19 @@ void coro_listen(void* argv) {
         if(s == -1)
             abort();
 
-        event.data.fd = infd;
+        struct FDInfo* fd_info = (struct FDInfo*)(malloc(sizeof(struct FDInfo)));
+        fd_info->fd = infd;
+        fd_info->coro = create_coro(coro_recv, fd_info);
+
+        event.data.ptr = fd_info;
         event.events = EPOLLIN | EPOLLET;
         s = epoll_ctl(efd, EPOLL_CTL_ADD, infd, &event);
         if(s == -1) {
             perror("epoll_ctl");
             abort();
         }
-    } while (0);
+
+    }
 }
 
 int main(int argc, char** argv)
@@ -257,7 +303,7 @@ int main(int argc, char** argv)
     events = calloc(MAXEVENTS, sizeof(event));
 
 	while (1) {
-        schedule_coro();
+        schedule_loop();
 		int n, i;
 		fprintf(stdout, "Blocking and waiting for epoll event...\n");
 		n = epoll_wait(efd, events, MAXEVENTS, -1);
