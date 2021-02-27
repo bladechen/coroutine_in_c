@@ -115,8 +115,23 @@ void registe_timer(coroutine_func cb, void * argv, time_t next)
     timer_count ++;
 }
 
-void timer_cb(void* argv)
+void detached_timer(void * argv)
 {
+
+    for (int i = 0; i < timer_count ; i ++)
+    {
+        if (timer_list[i].argv == argv)
+        {
+            timer_list[i].argv = NULL;
+            return;
+        }
+    }
+}
+
+
+
+void timer_cb(void* argv) {
+    printf ("resume coro %p\n", argv);
     resume_coro((struct coroutine*)(argv));
     return;
 }
@@ -126,30 +141,8 @@ void coro_sleep(void* argv,int interval)
     time_t local = time(NULL);
     registe_timer(timer_cb, co, local + interval);
     yield_coro();
+    detached_timer(co);
     return;
-}
-void func1(void* argv)
-{
-    printf ("start func1\n");
-    for (int i = 0;i < 5; i ++)
-    {
-        printf ("%p, func1 [%d]: %llu\n",&i, i, (long long unsigned int)(time_stamp));
-        coro_sleep(argv, 2);
-    }
-    printf ("end func1\n");
-}
-
-void func2(void* argv)
-{
-    printf ("start func2\n");
-
-    for (int i = 0;i < 10; i ++)
-    {
-        printf ("%p, func2 [%d]: %llu\n",&i , i, (long long unsigned int)(time_stamp));
-        coro_sleep(argv,4 );
-
-    }
-    printf ("end func2\n");
 }
 
 int sfd = 0;
@@ -169,6 +162,7 @@ void coro_recv(void* argv) {
     while(1)
     {
         count = read(fd, buf, sizeof(buf));
+        printf ("read count %d %d\n", (int)count, errno);
         if(count == -1)
         {
             if(errno != EAGAIN)
@@ -176,14 +170,16 @@ void coro_recv(void* argv) {
                 perror("read");
                 abort();
             }
+            printf ("yield\n");
             yield_coro();
+            continue;
         }
         else if(count == 0)
         {
             break;
         }
-        coro_sleep(((struct FDInfo*)(argv))->coro, 10);
-
+        coro_sleep(((struct FDInfo*)(argv))->coro, 5);
+        printf ("sleep back read count %zu\n", count);
         buf[count] = '\n';
         int s = write(1, buf, count+1);
         if(s == -1)
@@ -202,6 +198,7 @@ void coro_recv(void* argv) {
 }
 
 void coro_listen(void* argv) {
+
 
     int fd =  ((struct FDInfo*)(argv))->fd;
     printf ("calling coro_listen on fd: %d\n", fd);
@@ -245,6 +242,7 @@ void coro_listen(void* argv) {
         struct FDInfo* fd_info = (struct FDInfo*)(malloc(sizeof(struct FDInfo)));
         fd_info->fd = infd;
         fd_info->coro = create_coro(coro_recv, fd_info);
+        printf ("recv coro %p\n", fd_info->coro);
 
         event.data.ptr = fd_info;
         event.events = EPOLLIN | EPOLLET;
@@ -304,11 +302,20 @@ int main(int argc, char** argv)
 
 	while (1) {
         schedule_loop();
+        time_stamp = time(NULL);
+        for (int i = 0; i < timer_count; i ++)
+        {
+            /* printf("[%d] exe_time: %llu, cur time: %llu\n",i,(unsigned long long)timer_list[i].exe_time ,(unsigned long long)time_stamp); */
+            if (timer_list[i].exe_time <= time_stamp && timer_list[i].argv)
+            {
+                timer_list[i].cb(timer_list[i].argv);
+            }
+        }
 		int n, i;
-		fprintf(stdout, "Blocking and waiting for epoll event...\n");
-		n = epoll_wait(efd, events, MAXEVENTS, -1);
-		fprintf(stdout, "Received epoll event %d %d\n", n, errno);
-		assert(n >= 0);
+		/* fprintf(stdout, "Blocking and waiting for epoll event...\n"); */
+		n = epoll_wait(efd, events, MAXEVENTS, 1000);
+		/* fprintf(stdout, "Received epoll event %d %d\n", n, errno); */
+		/* assert(n >= 0); */
 		for (i=0; i<n; i++) {
             struct FDInfo* cur_fd_info = (struct FDInfo*)(events[i].data.ptr);
              if((events[i].events & EPOLLERR) ||
@@ -319,6 +326,7 @@ int main(int argc, char** argv)
                  free(cur_fd_info);
                  continue;
              } else {
+                 printf ("resume %p\n", cur_fd_info->coro);
                  resume_coro(cur_fd_info->coro);
              }
 		}
