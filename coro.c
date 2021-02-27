@@ -171,7 +171,9 @@ void destroy_coro(struct coroutine* coro)
     {
         return;
     }
-    /* assert(coro->_status == COROUTINE_INIT || ); */
+
+    assert(current_running_coro() == schedule_obj._daemon);
+    list_del(&coro->_link); // remove it
     assert(list_empty(&(coro->_link)) == true);
     if (coro->_stack_addr != NULL)
     {

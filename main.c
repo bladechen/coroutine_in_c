@@ -152,20 +152,69 @@ void func2(void* argv)
     printf ("end func2\n");
 }
 
-
-int sfd  = 0;
+int sfd = 0;
+int efd = 0;
 
 struct FDInfo {
     int fd;
     struct coroutine* coro;
 };
 
+void coro_listen(void* argv) {
+
+    int fd =  ((struct FDInfo*)(argv))->fd;
+    printf ("calling coro_listen on fd: %d\n", fd);
+    do {
+        struct epoll_event event ;
+        struct sockaddr in_addr;
+        socklen_t in_len;
+        int infd;
+        char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+
+        in_len = sizeof(in_addr);
+        infd = accept(fd, &in_addr, &in_len);
+        if(infd == -1)
+        {
+            if((errno == EAGAIN) ||
+               (errno == EWOULDBLOCK))
+            {
+                yield_coro();
+                break;
+            }
+            else
+            {
+                perror("accept");
+                break;
+            }
+        }
+        int s = getnameinfo(&in_addr, in_len,
+                        hbuf, sizeof(hbuf),
+                        sbuf, sizeof(sbuf),
+                        NI_NUMERICHOST | NI_NUMERICSERV);
+        if(s == 0)
+        {
+            printf("Accepted connection on descriptor %d"
+                   "(host=%s, port=%s)\n", infd, hbuf, sbuf);
+        }
+
+        s = make_socket_non_blocking(infd);
+        if(s == -1)
+            abort();
+
+        event.data.fd = infd;
+        event.events = EPOLLIN | EPOLLET;
+        s = epoll_ctl(efd, EPOLL_CTL_ADD, infd, &event);
+        if(s == -1) {
+            perror("epoll_ctl");
+            abort();
+        }
+    } while (0);
+}
 
 int main(int argc, char** argv)
 {
 	bootstrap_coro_env();
 	int s;
-	int efd;
 	struct epoll_event event ;
 	struct epoll_event *events = NULL;
 
@@ -188,35 +237,44 @@ int main(int argc, char** argv)
 	}
 
 	efd = epoll_create1(0);
-	if(efd == -1)
-	{
+	if(efd == -1) {
 		perror("epoll_create");
 		abort();
 	}
 
     struct FDInfo* fd_info = (struct FDInfo*)(malloc(sizeof(struct FDInfo)));
-    fd_info->fd = sfs;
-    fd_info->coro =
+    fd_info->fd = sfd;
+    fd_info->coro = create_coro(coro_listen, fd_info);
 
-
-	event.data.fd = sfd;
+	event.data.ptr = fd_info;
 	event.events = EPOLLIN | EPOLLET;
 	s = epoll_ctl(efd, EPOLL_CTL_ADD, sfd, &event);
-	if(s == -1)
-	{
+	if(s == -1) {
 		perror("epoll_ctl");
 		abort();
 	}
+    /* Buffer where events are returned */
+    events = calloc(MAXEVENTS, sizeof(event));
 
 	while (1) {
+        schedule_coro();
 		int n, i;
 		fprintf(stdout, "Blocking and waiting for epoll event...\n");
 		n = epoll_wait(efd, events, MAXEVENTS, -1);
-		fprintf(stdout, "Received epoll event\n");
+		fprintf(stdout, "Received epoll event %d %d\n", n, errno);
 		assert(n >= 0);
 		for (i=0; i<n; i++) {
-
-
+            struct FDInfo* cur_fd_info = (struct FDInfo*)(events[i].data.ptr);
+             if((events[i].events & EPOLLERR) ||
+                (events[i].events & EPOLLHUP)) {
+                 fprintf(stderr, "epoll error at fd: %d\n", cur_fd_info->fd);
+                 destroy_coro(cur_fd_info->coro);
+                 close(cur_fd_info->fd);
+                 free(cur_fd_info);
+                 continue;
+             } else {
+                 resume_coro(cur_fd_info->coro);
+             }
 		}
 	}
 
